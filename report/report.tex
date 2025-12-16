@@ -1,0 +1,327 @@
+\documentclass[12pt]{article}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\geometry{margin=1in}
+\definecolor{codebg}{HTML}{F8F9FB}
+\definecolor{codeframe}{HTML}{D0D7DE}
+\definecolor{codekw}{HTML}{0F62FE}
+\definecolor{codecomment}{HTML}{4F6B6B}
+\definecolor{codestring}{HTML}{9A1B1B}
+\definecolor{codeline}{HTML}{6E7781}
+\lstdefinestyle{fancy}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{codeframe},
+  frameround=tttt,
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestring},
+  numberstyle=\color{codeline},
+  numbers=left,
+  numbersep=10pt,
+  showstringspaces=false,
+  tabsize=4,
+  keepspaces=true,
+  columns=fullflexible
+}
+\lstset{style=fancy}
+\begin{document}
+\begin{titlepage}
+    \noindent
+    \begin{minipage}[t]{0.48\textwidth}
+        % Placeholder: replace with actual Faculty of Engineering logo file
+        \includegraphics[width=0.45\textwidth]{engineering_logo_placeholder.jpg}
+    \end{minipage}
+    \begin{minipage}[t]{0.48\textwidth}
+        \raggedleft
+        % Placeholder: replace with actual university logo file
+        \includegraphics[width=0.45\textwidth]{university_logo_placeholder.png}
+    \end{minipage}
+    \vspace{1.5cm}
+    \begin{center}
+        {\LARGE Helwan University, Faculty of Engineering\\[0.5cm]}
+        {\Huge \textbf{Iterative Deepening DFS for Pacman}\\[0.75cm]}
+        {\large Presented to: Dr. Shahira, Eng. Abdelrahman, Eng. Nancy\\[1.0cm]}
+        {\large Team Members:}\\[0.3cm]
+        {\large Ziad Osama Mohamed El-Boshy --- 222250166\\
+        Suhila Usama Ahmed --- 222250175\\
+        Omar Ahmed Fouad Elsayed --- 222250191\\
+        Ali Reda --- 4\\
+        Mohamed Magdy --- 5}\\
+        \vfill
+        {\large \today}
+    \end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Project Context}
+This repository is the UC Berkeley CS188 Pacman search project. Core logic lives in \texttt{pacman.py}, \texttt{game.py}, \texttt{util.py}, with search implementations in \texttt{search.py}, agents in \texttt{searchAgents.py}, and the CLI/game harness in \texttt{pacman.py}. Assets include layouts under \texttt{layouts/} and autograder fixtures in \texttt{test\_cases/}.
+
+\section{Change Log and Rationale}
+All changes were made to support iterative deepening DFS (IDDFS) and standalone depth-limited DFS (DLDFS) with configurable depth limits and better usability.
+
+\subsection{search.py}
+\begin{itemize}
+    \item Added \texttt{time} import to timestamp runs for metrics.
+    \item Implemented \texttt{depth\_limited\_dfs} to run DFS with a depth cap (or unbounded when \texttt{None}) while counting expansions. This isolates a single depth iteration for IDDFS.
+    \item Implemented \texttt{depthLimitedSearch} as a CLI-facing wrapper that prints DLDFS metrics and returns only the path; aliased as \texttt{dldfs}.
+    \item Implemented \texttt{iterativeDeepeningSearch} with optional \texttt{max\_depth} (default 1000 or unbounded when \texttt{None}). It validates the argument, loops depth limits until a solution is found or the cap is reached, accumulates expansions, and prints timing plus node counts.
+    \item Added shorthand alias \texttt{iddfs} for iterative deepening.
+\end{itemize}
+
+\noindent\textbf{\texttt{depth\_limited\_dfs} (full code):}\newline
+\begin{lstlisting}[language=Python]
+def depth_limited_dfs(problem: SearchProblem, limit: int):
+    """
+    Depth-limited DFS used by iterative deepening.
+
+    Returns a tuple of (path, found, expanded) where expanded counts node
+    expansions during this limited search.
+    """
+    from util import Stack
+
+    # Treat None as unbounded for convenience when passed from CLI.
+    depth_cap = float('inf') if limit is None else int(limit)
+
+    stack = Stack()
+    stack.push((problem.getStartState(), [], 0))
+    visited = {}
+    expanded = 0
+
+    while not stack.isEmpty():
+        state, path, depth = stack.pop()
+
+        if problem.isGoalState(state):
+            return path, True, expanded
+
+        if depth >= depth_cap:
+            continue
+
+        if state in visited and visited[state] <= depth:
+            continue
+        visited[state] = depth
+
+        successors = problem.getSuccessors(state)
+        expanded += 1
+        for successor, action, step_cost in successors:
+            stack.push((successor, path + [action], depth + 1))
+
+    return [], False, expanded
+\end{lstlisting}
+\noindent\textbf{Step-by-step:}
+\begin{enumerate}
+    \item Normalize the limit: \texttt{None} becomes \texttt{inf}, else cast to \texttt{int}.
+    \item Initialize a LIFO stack with the start state, an empty action path, and depth 0.
+    \item Pop a node; if it is a goal, return its path, mark success, and report expansions so far.
+    \item If the current depth meets/exceeds the cap, skip expanding that node.
+    \item Avoid revisits at shallower or equal depths by tracking the best depth per state.
+    \item Expand successors, increment the expansion counter, and push each child with depth + 1 and an updated action list.
+    \item If the stack drains without a goal, report failure with the number of expanded nodes.
+\end{enumerate}
+
+\noindent\textbf{\texttt{depthLimitedSearch} (full code):}\newline
+\begin{lstlisting}[language=Python]
+def depthLimitedSearch(problem: SearchProblem, max_depth: int = 1000):
+    """
+    Depth-limited DFS that mirrors CLI usage: returns only the action path and
+    prints basic metrics. Uses `max_depth` to align with SearchAgent's parsing.
+    """
+    try:
+        depth_cap = int(max_depth) if max_depth is not None else None
+    except (TypeError, ValueError):
+        raise AttributeError('max_depth must be an integer or None')
+
+    start_time = time.time()
+    path, found, expanded = depth_limited_dfs(problem, depth_cap)
+    elapsed = time.time() - start_time
+
+    cap_label = depth_cap if depth_cap is not None else 'inf'
+    if found:
+        print(f"[DLDFS] solution within depth {cap_label} | expanded {expanded} nodes | {elapsed:.4f}s")
+        return path
+    print(f"[DLDFS] no solution within depth {cap_label} | expanded {expanded} nodes | {elapsed:.4f}s")
+    return []
+\end{lstlisting}
+\noindent\textbf{Step-by-step:}
+\begin{enumerate}
+    \item Parse \texttt{max\_depth} (or allow \texttt{None} for unbounded); raise on invalid input.
+    \item Run \texttt{depth\_limited\_dfs} with that cap to get path, success flag, and expansion count.
+    \item Time the run and print DLDFS metrics (cap, expansions, elapsed).
+    \item Return the path if found; otherwise return an empty list after logging failure.
+\end{enumerate}
+
+\noindent\textbf{\texttt{iterativeDeepeningSearch} (full code):}\newline
+\begin{lstlisting}[language=Python]
+def iterativeDeepeningSearch(problem: SearchProblem, max_depth: int = 1000):
+    """
+    Iterative deepening DFS: increase the depth limit until a path is found or
+    max_depth is reached. Prints basic metrics for manual comparison.
+    """
+    try:
+        max_depth = int(max_depth) if max_depth is not None else None
+    except (TypeError, ValueError):
+        raise AttributeError('max_depth must be an integer or None')
+
+    total_expanded = 0
+    start_time = time.time()
+
+    depth = 1
+    while True:
+        path, found, expanded = depth_limited_dfs(problem, depth)
+        total_expanded += expanded
+
+        if found:
+            elapsed = time.time() - start_time
+            print(f"[IDDFS] solution at depth {depth} | expanded {total_expanded} nodes | {elapsed:.4f}s")
+            return path
+        if max_depth is not None and depth >= max_depth:
+            print(f"[IDDFS] no solution within depth {max_depth} | expanded {total_expanded} nodes")
+            return []
+        depth += 1
+
+    return []
+\end{lstlisting}
+\noindent\textbf{Step-by-step:}
+\begin{enumerate}
+    \item Validate and coerce \texttt{max\_depth} to an integer (or \texttt{None} for unbounded), raising an error on bad input.
+    \item Track total expansions and start a wall-clock timer to report performance.
+    \item Begin with a depth cap of 1 and loop, calling \texttt{depth\_limited\_dfs} for the current limit.
+    \item Accumulate expansions from each limited search to see the total work done across iterations.
+    \item On success, print the depth reached, total expansions, and elapsed seconds, then return the path.
+    \item If the configured \texttt{max\_depth} is reached without a goal, print a no-solution message and return an empty path.
+    \item Otherwise increment the depth limit and continue; the terminal \texttt{return []} is defensive for completeness.
+\end{enumerate}
+
+\subsection{searchAgents.py}
+\begin{itemize}
+    \item \texttt{SearchAgent} now accepts \texttt{maxDepth} (default 1000) and safely casts it for searches that take a \texttt{max\_depth} or \texttt{limit} parameter (covers IDDFS and DLDFS). This prevents string parsing errors when using CLI arguments.
+    \item Added \texttt{IterativeDeepeningAgent}, a convenience wrapper that selects \texttt{iterativeDeepeningSearch} with the chosen problem type and depth cap.
+\end{itemize}
+
+\noindent\textbf{Key snippet:}\newline
+\begin{lstlisting}[language=Python]
+func = getattr(search, fn)
+if func and ('max_depth' in func.__code__.co_varnames or 'limit' in func.__code__.co_varnames):
+    depth_limit = int(maxDepth) if maxDepth is not None else None
+...
+elif 'max_depth' in func.__code__.co_varnames:
+    self.searchFunction = lambda x: func(x, max_depth=depth_limit)
+elif 'limit' in func.__code__.co_varnames:
+    self.searchFunction = lambda x: func(x, limit=depth_limit)
+\end{lstlisting}
+
+\subsection{pacman.py}
+\begin{itemize}
+    \item Added a new CLI flag \texttt{--maxDepth} to pass depth limits from the command line into agents. The flag is optional; leaving it unset uses the agent defaults.
+\end{itemize}
+
+\noindent\textbf{Key snippet:}\newline
+\begin{lstlisting}[language=Python]
+parser.add_option('--maxDepth', dest='maxDepth', type='int',
+    help=default('Maximum search depth for depth-limited agents'), default=None)
+...
+if options.maxDepth is not None:
+    agentOpts.setdefault('maxDepth', options.maxDepth)
+\end{lstlisting}
+
+\section{Behavioral Impact}
+\begin{itemize}
+    \item Depth-limited DFS can be invoked directly via \texttt{fn=dldfs,maxDepth=\#} for fixed-cap exploratory runs.
+    \item Users can now run IDDFS with configurable depth caps directly from the CLI (e.g., \texttt{fn=iddfs,maxDepth=200}).
+    \item Depth parsing is robust to string inputs from the CLI, eliminating type errors when composing agent arguments.
+    \item Iterative deepening reports the depth at which the solution is found, total nodes expanded, and wall-clock time, aiding comparison against single-pass DFS or BFS.
+\end{itemize}
+
+\section{Usage Examples}
+\begin{itemize}
+    \item Single depth-limited DFS run: \\[-0.2cm]
+    \texttt{python pacman.py -p SearchAgent -a fn=dldfs,maxDepth=200 \\ --layout mediumMaze --frameTime 0}
+    \item Full IDDFS run on a medium maze: \\[-0.2cm]
+    \texttt{python pacman.py -p SearchAgent -a fn=iddfs,maxDepth=200 \\ --layout mediumMaze --frameTime 0}
+    \item Convenience agent: \\[-0.2cm]
+    \texttt{python pacman.py -p IterativeDeepeningAgent -a maxDepth=150 \\ --layout smallClassic --frameTime 0}
+\end{itemize}
+
+\section{IDDFS Observed Metrics}
+Command: \texttt{python pacman.py -p SearchAgent -a fn=iddfs,maxDepth=200 --layout mediumMaze --frameTime 0 -q}\\
+Run output:\\
+\begin{lstlisting}[language=Python]
+[IDDFS] solution at depth 68 | expanded 10063 nodes | 0.0226s
+Path found with total cost of 68 in 0.0 seconds
+Search nodes expanded: 10063
+\end{lstlisting}
+Pacman wins with score 442 using depth 68. Lower depth caps (e.g., 25) would yield no movement because the solution exceeds the limit.
+
+\section{Depth-Limited DFS (DLDFS) Output}
+Command: \texttt{python pacman.py -p SearchAgent -a fn=dldfs,maxDepth=200 --layout mediumMaze --frameTime 0 -q}\\
+Run output:\\
+\begin{lstlisting}[language=Python]
+[SearchAgent] using function dldfs with max depth 200
+[SearchAgent] using problem type PositionSearchProblem
+[DLDFS] solution within depth 200 | expanded 146 nodes | 0.0005s
+Path found with total cost of 130 in 0.0 seconds
+Search nodes expanded: 146
+Pacman emerges victorious! Score: 380
+\end{lstlisting}
+DLDFS finishes quickly with far fewer expansions but returns a longer path (cost 130) because it follows the DFS order at the given limit rather than the shallowest goal.
+
+\section{Evaluation Metrics}
+\subsection*{Depth-Limited DFS (DLDFS)}
+\begin{itemize}
+    \item Command: \texttt{python pacman.py -p SearchAgent -a fn=dldfs,maxDepth=200 --layout mediumMaze --frameTime 0 -q}
+    \item Metrics: \textasciitilde0.0005s, 146 nodes expanded, path cost 130.
+    \item Upside: extremely fast and low memory; minimal re-expansion; good when any goal within the cap is acceptable.
+    \item Downside: path follows DFS order, not necessarily shallowest or cheapest; sensitive to successor ordering and the chosen cap.
+\end{itemize}
+
+\subsection*{Iterative Deepening DFS (IDDFS)}
+\begin{itemize}
+    \item Command: \texttt{python pacman.py -p SearchAgent -a fn=iddfs,maxDepth=200 --layout mediumMaze --frameTime 0 -q}
+    \item Metrics: \textasciitilde0.0226s, 10063 nodes expanded, path cost 68.
+    \item Upside: finds the shallowest goal reachable within the cap; complete when unbounded; still uses DFS-like memory.
+    \item Downside: heavy re-expansion across depth layers; slower than single-run DFS at the same cap.
+\end{itemize}
+
+\subsection*{Comparison}
+\begin{itemize}
+    \item On \texttt{mediumMaze} with cap 200: DLDFS is ~45x faster and ~69x fewer expansions but returns a longer path (cost 130) than IDDFS (cost 68).
+    \item Choose DLDFS for quick, memory-light exploratory runs; choose IDDFS when you need the shallowest solution and can tolerate extra expansions.
+\end{itemize}
+
+\section{Testing Notes}
+Practical checks were run headless with \texttt{--frameTime 0} to avoid graphics overhead. To validate locally:
+\begin{itemize}
+    \item Depth-limited DFS sample: \texttt{python pacman.py -p SearchAgent \\ -a fn=dldfs,maxDepth=200 --layout mediumMaze --frameTime 0 -q}
+    \item Full IDDFS path on a medium maze: \texttt{python pacman.py -p SearchAgent \\ -a fn=iddfs,maxDepth=200 --layout mediumMaze --frameTime 0}
+    \item Verify depth parsing via a small cap (expected ``no solution within depth'' message) and a sufficient cap (solution found).
+    \item Use \texttt{--maxDepth} with other agents if they consume depth limits.
+\end{itemize}
+
+\section{Algorithm Comparison: DFS Variants}
+\subsection{DFS}
+\textbf{Advantages}: Low memory; quickly descends into deep mazes.\\
+\textbf{Disadvantages}: May miss solutions in infinite spaces; can return long, non-optimal paths; sensitive to successor order.
+
+\subsection{Depth-Limited DFS}
+\textbf{Advantages}: Prevents runaway depth; useful when a shallow bound is known.\\
+\textbf{Disadvantages}: Incomplete if the limit is too small; still order-sensitive; requires picking a bound.
+
+\subsection{Iterative Deepening DFS}
+\textbf{Advantages}: Completeness similar to BFS with DFS-like memory; finds the shallowest goal without large queues; tunable via depth cap.\\
+\textbf{Disadvantages}: Re-expands nodes at each depth layer; overhead grows if the optimal depth is large; needs a sensible cap to avoid long runs.
+
+\subsection{BFS (Reference)}
+\textbf{Advantages}: Finds shortest path in steps; complete on finite graphs.\\
+\textbf{Disadvantages}: High memory footprint; slower on large branching factors; ignores edge costs.
+
+\subsection*{Recommended for Pacman} 
+\textbf{IDDFS} is the best balance when goal depth is unknown and memory is limited. Choose BFS when you need the shallowest path and can afford memory; use plain DFS for quick exploratory runs on small maps; pick depth-limited DFS when you trust a specific depth bound.
+
+\end{document}
