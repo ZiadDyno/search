@@ -1,0 +1,9 @@
+UC Berkeley CS188 Pacman Project License and Attribution
+
+This repository bundles the UC Berkeley CS188 Pacman framework. I do not own the game or its assets; my work is limited to implementing and documenting search algorithms on top of the Berkeley code.
+
+Original UC Berkeley License
+You are free to use or extend these projects for educational purposes provided that (1) you do not distribute or publish solutions, (2) you retain this notice, and (3) you provide clear attribution to UC Berkeley, including a link to http://ai.berkeley.edu.
+
+Attribution
+The Pacman AI projects were developed at UC Berkeley. The core projects and autograders were primarily created by John DeNero and Dan Klein. Student-side autograding was added by Brad Miller, Nick Hay, and Pieter Abbeel. My changes are limited to search-related implementations and documentation.
